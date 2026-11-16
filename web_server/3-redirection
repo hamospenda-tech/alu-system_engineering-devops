@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Install and configure nginx with a permanent redirect.
+set -e
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y nginx
+apt-get install -y curl
+mkdir -p /var/www/html
+printf '%s\n' 'Holberton School for the win!' > /var/www/html/index.html
+cat > /etc/nginx/sites-available/default <<'NGINX'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    root /var/www/html;
+    index index.html;
+    server_name _;
+    location / {
+        try_files $uri $uri/ =404;
+    }
+    location ~ ^/redirect_me/?$ {
+        return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
+    }
+}
+NGINX
+ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+nginx -t
+service nginx restart
+status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1/)
+[ "$status" = 200 ] || { echo "Homepage check failed: expected HTTP 200, got $status" >&2; exit 1; }
+curl --fail --silent --show-error http://127.0.0.1/ | grep -F 'Holberton School'
+status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1/redirect_me)
+[ "$status" = 301 ] || { echo "Redirect check failed: expected HTTP 301, got $status" >&2; exit 1; }
+echo 'Local HTTP checks passed. Verify the web01 public IP from another computer before requesting review.'
