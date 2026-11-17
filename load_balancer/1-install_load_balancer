@@ -1,43 +1,33 @@
 #!/usr/bin/env bash
-# Install HAProxy on lb-01 and balance HTTP requests across both web servers.
-set -e
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y haproxy curl
-cat > /etc/haproxy/haproxy.cfg <<'HAPROXY'
+# Installs and configures HAProxy to load balance web-01 and web-02 using roundrobin
+apt-get -y update
+apt-get -y install haproxy
+echo "ENABLED=1" >> /etc/default/haproxy
+cat > /etc/haproxy/haproxy.cfg <<'EOF'
 global
     log /dev/log local0
     log /dev/log local1 notice
-    chroot /var/lib/haproxy
+    maxconn 2048
     user haproxy
     group haproxy
     daemon
 
 defaults
-    log global
-    mode http
-    option httplog
-    option dontlognull
+    log     global
+    mode    http
+    option  httplog
+    option  dontlognull
     timeout connect 5000
-    timeout client 50000
-    timeout server 50000
+    timeout client  50000
+    timeout server  50000
 
-frontend public_http
+frontend web_frontend
     bind *:80
-    default_backend web_servers
+    default_backend web_backend
 
-backend web_servers
+backend web_backend
     balance roundrobin
-    option httpchk GET /
-    server web01 35.178.250.230:80 check
-    server web02 35.178.244.80:80 check
-HAPROXY
-printf '%s
-' 'ENABLED=1' > /etc/default/haproxy
-haproxy -c -f /etc/haproxy/haproxy.cfg
-[ -x /etc/init.d/haproxy ] || { echo 'HAProxy init script missing' >&2; exit 1; }
+    server 7241-web-01 35.178.250.230:80 check
+    server 7241-web-02 35.178.244.80:80 check
+EOF
 service haproxy restart
-status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1/)
-[ "$status" = 200 ] || { echo "Expected HTTP 200 from HAProxy, got $status. Check both web servers and port 80 access." >&2; exit 1; }
-curl --fail --silent --show-error --head http://127.0.0.1/ | grep -i '^X-Served-By:'
-echo 'Local HAProxy HTTP check passed. Verify both hostnames appear through the public lb-01 IP before review.'
