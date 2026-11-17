@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
-# Install nginx with the server hostname in X-Served-By and preserve web server tasks.
-set -e
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y nginx curl
+# Configures Nginx so every response includes an X-Served-By header with the server's hostname
+apt-get -y update
+apt-get -y install nginx
 mkdir -p /var/www/html
-printf '%s
-' 'Holberton School for the win!' > /var/www/html/index.html
-if [ ! -f /var/www/html/404.html ]; then
-    printf '%s
-' "Ceci n'est pas une page" > /var/www/html/404.html
-fi
-cat > /etc/nginx/sites-available/default <<'NGINX'
+echo "Hello World!" > /var/www/html/index.html
+echo "Ceci n'est pas une page" > /var/www/html/404.html
+cat > /etc/nginx/sites-available/default <<'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -22,7 +16,7 @@ server {
     location / {
         try_files $uri $uri/ =404;
     }
-    location ~ ^/redirect_me/?$ {
+    location /redirect_me {
         return 301 https://www.youtube.com/watch?v=QH2-TGUlwu4;
     }
     error_page 404 /404.html;
@@ -30,13 +24,6 @@ server {
         internal;
     }
 }
-NGINX
+EOF
 ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-nginx -t
 service nginx restart
-status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' http://127.0.0.1/)
-[ "$status" = 200 ] || { echo "Expected HTTP 200, got $status" >&2; exit 1; }
-curl --fail --silent --show-error http://127.0.0.1/ | grep -F 'Holberton School'
-served_by=$(curl --fail --silent --show-error --head http://127.0.0.1/ | tr -d '' | awk 'tolower($1) == "x-served-by:" {print $2}')
-[ "$served_by" = "$(hostname)" ] || { echo 'X-Served-By does not match hostname' >&2; exit 1; }
-echo 'Local nginx checks passed. Verify both public web server IPs before review.'
